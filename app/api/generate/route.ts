@@ -34,8 +34,6 @@ const MASTER_PROMPT = `
 export async function POST(request: Request) {
   try {
     const { profileText } = await request.json();
-
-    // Эта строка теперь берет ключ из переменных окружения Vercel
     const apiKey = process.env.GOOGLE_API_KEY;
 
     if (!apiKey) {
@@ -46,7 +44,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Текст профиля не предоставлен' }, { status: 400 });
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+    // --- ИСПОЛЬЗУЕМ МОДЕЛЬ GEMINI 2.5 PRO ---
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`;
 
     const payload = {
       systemInstruction: {
