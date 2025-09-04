@@ -35,11 +35,17 @@ export async function POST(request: Request) {
   try {
     const { profileText } = await request.json();
 
+    // Эта строка теперь берет ключ из переменных окружения Vercel
+    const apiKey = process.env.GOOGLE_API_KEY;
+
+    if (!apiKey) {
+      return NextResponse.json({ error: 'API ключ не найден. Убедитесь, что он добавлен в Vercel.' }, { status: 500 });
+    }
+
     if (!profileText) {
       return NextResponse.json({ error: 'Текст профиля не предоставлен' }, { status: 400 });
     }
 
-    const apiKey = ""; // Canvas injects the key here
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
 
     const payload = {
@@ -74,15 +80,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Не удалось получить корректный ответ от AI' }, { status: 500 });
     }
 
-    // AI возвращает JSON в виде строки, мы парсим его в объект
     const parsedResponse = JSON.parse(jsonText);
 
     return NextResponse.json(parsedResponse);
 
   } catch (error) {
     console.error(error);
-    // Проверяем, является ли ошибка экземпляром Error
     const errorMessage = error instanceof Error ? error.message : 'Неизвестная внутренняя ошибка';
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
+
