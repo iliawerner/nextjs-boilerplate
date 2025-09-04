@@ -1,4 +1,4 @@
-'use client'; // <-- Это важно! Говорит Next.js, что компонент интерактивный.
+'use client'; 
 
 import React, { useState, useEffect } from 'react';
 
@@ -8,39 +8,35 @@ interface Contact {
   name: string;
   role: string;
   status: 'New' | 'Contacted' | 'Replied' | 'Archived';
-  profileText?: string;
-  analysis?: string;
-  generatedMessage?: string;
-  conversation?: { author: 'user' | 'client'; text: string }[];
+  profileText: string;
+  analysis: string;
+  generatedMessage: string;
+  conversation: { author: 'user' | 'client'; text: string }[];
 }
 
 // Начальный список контактов для примера
 const initialContacts: Contact[] = [
-  { id: '1', name: 'Илья Вернер', role: 'Co-founder at SCULPT AI', status: 'Replied' },
-  { id: '2', name: 'Евгений Смирнов', role: 'Head of Product at Awesome Inc.', status: 'Contacted' },
-  { id: '3', name: 'Дарья Камышина', role: 'Lead PM at Tech Innovations', status: 'New' },
+  { id: '1', name: 'Илья Вернер', role: 'Co-founder at SCULPT AI', status: 'Replied', profileText: '', analysis: '', generatedMessage: '', conversation: [] },
+  { id: '2', name: 'Евгений Смирнов', role: 'Head of Product at Awesome Inc.', status: 'Contacted', profileText: '', analysis: '', generatedMessage: '', conversation: [] },
+  { id: '3', name: 'Дарья Камышина', role: 'Lead PM at Tech Innovations', status: 'New', profileText: '', analysis: '', generatedMessage: '', conversation: [] },
 ];
 
 export default function HomePage() {
-  // --- СОСТОЯНИЕ (State) ---
-  // Список всех контактов
   const [contacts, setContacts] = useState<Contact[]>([]);
-  // ID выбранного контакта
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
-  // Текст в поле поиска
   const [searchTerm, setSearchTerm] = useState('');
-  
-  // --- ЛОГИКА ---
+  const [isLoading, setIsLoading] = useState(false); // Состояние для индикатора загрузки
+  const [error, setError] = useState<string | null>(null); // Состояние для ошибок
 
-  // При первой загрузке приложения, пытаемся загрузить контакты из памяти браузера
+  // Загрузка контактов из памяти браузера при первом запуске
   useEffect(() => {
     try {
       const savedContacts = localStorage.getItem('sculpt_contacts');
-      if (savedContacts) {
-        setContacts(JSON.parse(savedContacts));
-        setSelectedContactId(JSON.parse(savedContacts)[0]?.id || null);
+      if (savedContacts && savedContacts !== '[]') {
+        const parsedContacts = JSON.parse(savedContacts);
+        setContacts(parsedContacts);
+        setSelectedContactId(parsedContacts[0]?.id || null);
       } else {
-        // Если в памяти ничего нет, используем начальный список
         setContacts(initialContacts);
         setSelectedContactId(initialContacts[0]?.id || null);
       }
@@ -49,28 +45,73 @@ export default function HomePage() {
       setContacts(initialContacts);
       setSelectedContactId(initialContacts[0]?.id || null);
     }
-  }, []); // Пустой массив [] означает, что это выполнится только один раз
+  }, []);
 
-  // Когда список контактов меняется, сохраняем его в память браузера
+  // Сохранение контактов в память при их изменении
   useEffect(() => {
-    if(contacts.length > 0) {
+    if (contacts.length > 0) {
       localStorage.setItem('sculpt_contacts', JSON.stringify(contacts));
     }
-  }, [contacts]); // Этот код выполняется каждый раз, когда `contacts` изменяется
+  }, [contacts]);
+
+  // Функция для обновления любого поля в конкретном контакте
+  const updateContactField = (contactId: string, field: keyof Contact, value: any) => {
+    setContacts(prev => prev.map(c => c.id === contactId ? { ...c, [field]: value } : c));
+  };
+
+  // Функция вызова AI для анализа профиля
+  const handleAnalysis = async () => {
+    if (!selectedContactId) return;
+    
+    const contact = contacts.find(c => c.id === selectedContactId);
+    if (!contact || !contact.profileText) {
+        alert('Пожалуйста, вставьте текст профиля для анализа.');
+        return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    updateContactField(selectedContactId, 'analysis', '');
+    updateContactField(selectedContactId, 'generatedMessage', '');
+
+    try {
+        const response = await fetch('/api/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ profileText: contact.profileText })
+        });
+
+        if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(errData.error || 'Ошибка при генерации ответа');
+        }
+
+        const data = await response.json();
+        updateContactField(selectedContactId, 'analysis', data.analysis);
+        updateContactField(selectedContactId, 'generatedMessage', data.message);
+
+    } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Произошла неизвестная ошибка';
+        setError(errorMessage);
+        console.error(err);
+    } finally {
+        setIsLoading(false);
+    }
+  };
 
   // Функция добавления нового контакта
   const handleAddContact = () => {
-    const name = prompt('Введите имя контакта:');
+    const name = prompt('Введите имя нового контакта:');
     if (name) {
       const newContact: Contact = {
-        id: new Date().toISOString(), // Уникальный ID на основе времени
-        name: name,
+        id: new Date().toISOString(),
+        name,
         role: 'Должность/Компания',
         status: 'New',
+        profileText: '', analysis: '', generatedMessage: '', conversation: []
       };
-      const updatedContacts = [newContact, ...contacts];
-      setContacts(updatedContacts);
-      setSelectedContactId(newContact.id); // Сразу выбираем новый контакт
+      setContacts(prev => [newContact, ...prev]);
+      setSelectedContactId(newContact.id);
     }
   };
   
@@ -79,7 +120,6 @@ export default function HomePage() {
     if (confirm('Вы уверены, что хотите удалить этот контакт?')) {
         const updatedContacts = contacts.filter(c => c.id !== idToDelete);
         setContacts(updatedContacts);
-        // Если удалили выбранный контакт, выбираем первый в списке
         if(selectedContactId === idToDelete) {
             setSelectedContactId(updatedContacts[0]?.id || null);
         }
@@ -88,40 +128,28 @@ export default function HomePage() {
 
   // Функция смены статуса
   const handleStatusChange = (contactId: string, newStatus: Contact['status']) => {
-      setContacts(contacts.map(c => c.id === contactId ? {...c, status: newStatus} : c));
+      updateContactField(contactId, 'status', newStatus);
   }
 
-  // Фильтруем контакты на основе текста в поиске
+  // Фильтрация контактов для поиска
   const filteredContacts = contacts.filter(contact =>
     contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     contact.role.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  // Находим текущий выбранный контакт
+  
+  // Поиск выбранного контакта в общем списке
   const selectedContact = contacts.find(c => c.id === selectedContactId);
 
-  // --- ИНТЕРФЕЙС (JSX) ---
   return (
     <div className="container">
-      {/* Левая панель: Список контактов */}
       <aside className="sidebar">
         <div className="sidebar-header">
           <h1 className="title">SCULPT Outreach</h1>
-          <input
-            type="text"
-            placeholder="🔍 Поиск контакта..."
-            className="search-input"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+          <input type="text" placeholder="🔍 Поиск контакта..." className="search-input" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
         </div>
         <div className="contact-list">
           {filteredContacts.map((contact) => (
-            <div
-              key={contact.id}
-              className={`contact-item ${contact.id === selectedContactId ? 'active' : ''}`}
-              onClick={() => setSelectedContactId(contact.id)}
-            >
+            <div key={contact.id} className={`contact-item ${contact.id === selectedContactId ? 'active' : ''}`} onClick={() => setSelectedContactId(contact.id)}>
               <div className="contact-info">
                 <h3>{contact.name}</h3>
                 <span className={`status ${contact.status.toLowerCase()}`}>{contact.status}</span>
@@ -131,65 +159,52 @@ export default function HomePage() {
           ))}
         </div>
         <div className="sidebar-footer">
-          <button className="btn btn-primary" onClick={handleAddContact}>
-            + Добавить контакт
-          </button>
+          <button className="btn btn-primary" onClick={handleAddContact}>+ Добавить контакт</button>
         </div>
       </aside>
 
-      {/* Правая панель: Рабочая область */}
       <main className="main-content">
         {selectedContact ? (
           <>
             <div className="card">
-                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                    <h2 className="card-title">Профиль: {selectedContact.name}</h2>
+                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px'}}>
+                    <h2 className="card-title" style={{ margin: 0 }}>Профиль: {selectedContact.name}</h2>
                     <div>
-                        <select 
-                            value={selectedContact.status} 
-                            onChange={(e) => handleStatusChange(selectedContact.id, e.target.value as Contact['status'])}
-                            className="status-select"
-                        >
+                        <select value={selectedContact.status} onChange={(e) => handleStatusChange(selectedContact.id, e.target.value as Contact['status'])} className="status-select">
                             <option value="New">New</option>
                             <option value="Contacted">Contacted</option>
                             <option value="Replied">Replied</option>
                             <option value="Archived">Archived</option>
                         </select>
-                        <button onClick={() => handleDeleteContact(selectedContact.id)} className="delete-btn">
-                            🗑️
-                        </button>
+                        <button onClick={() => handleDeleteContact(selectedContact.id)} className="delete-btn">🗑️</button>
                     </div>
                 </div>
                 <textarea
-                    key={selectedContact.id} // Ключ для сброса значения при смене контакта
+                    key={selectedContact.id} // This forces re-render on contact switch
                     placeholder="Вставьте сюда полный текст со страницы LinkedIn..."
                     className="textarea"
                     style={{ height: '160px' }}
-                    defaultValue={selectedContact.profileText || ''}
+                    defaultValue={selectedContact.profileText}
+                    onChange={(e) => updateContactField(selectedContact.id, 'profileText', e.target.value)}
                 />
-                <button className="btn btn-primary" style={{ marginTop: '12px' }}>
-                    Провести анализ (Этап 1)
+                <button className="btn btn-primary" style={{ marginTop: '12px' }} onClick={handleAnalysis} disabled={isLoading}>
+                    {isLoading ? 'Анализ...' : 'Провести анализ (Этап 1)'}
                 </button>
+            </div>
+            {error && <div className="error-box"><strong>Ошибка:</strong> {error}</div>}
+            
+            <div className="card">
+                <h2 className="card-title">Результат Анализа (Этап 1)</h2>
+                <div className="message-box" style={{ whiteSpace: 'pre-wrap' }}>
+                    {selectedContact.analysis || 'Здесь появится результат анализа...'}
+                </div>
             </div>
 
             <div className="card">
-                <h2 className="card-title">Сгенерированное сообщение</h2>
-                <div className="message-box">
-                    <p>Здесь появится результат анализа и первое сообщение...</p>
+                <h2 className="card-title">Сгенерированное сообщение (Этап 2)</h2>
+                <div className="message-box" style={{ whiteSpace: 'pre-wrap' }}>
+                    {selectedContact.generatedMessage || 'Здесь появится готовое сообщение для отправки...'}
                 </div>
-            </div>
-            
-            <div className="card">
-              <h2 className="card-title">Переписка</h2>
-              {/* Тут будет история переписки */}
-              <textarea
-                placeholder="Вставьте сюда ответ клиента..."
-                className="textarea"
-                style={{ marginTop: '16px', height: '100px' }}
-              />
-              <button className="btn btn-secondary" style={{ marginTop: '12px' }}>
-                Сгенерировать ответ
-              </button>
             </div>
           </>
         ) : (
@@ -200,25 +215,12 @@ export default function HomePage() {
         )}
       </main>
       <style jsx>{`
-        .status-select {
-            background-color: #374151;
-            color: #e5e7eb;
-            border: 1px solid #4b5563;
-            border-radius: 6px;
-            padding: 4px 8px;
-            margin-right: 12px;
-        }
-        .delete-btn {
-            background: none;
-            border: none;
-            color: #9ca3af;
-            cursor: pointer;
-            font-size: 1.2rem;
-        }
-        .delete-btn:hover {
-            color: #ef4444;
-        }
+        .status-select { background-color: #374151; color: #e5e7eb; border: 1px solid #4b5563; border-radius: 6px; padding: 4px 8px; margin-right: 12px; }
+        .delete-btn { background: none; border: none; color: #9ca3af; cursor: pointer; font-size: 1.2rem; }
+        .delete-btn:hover { color: #ef4444; }
+        .error-box { background-color: #4a1d1d; border: 1px solid #ef4444; color: #fecaca; padding: 12px; border-radius: 8px; }
       `}</style>
     </div>
   );
 }
+
